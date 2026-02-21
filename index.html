@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Speed Tracker</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#2c3e50">
+
+  <link rel="manifest" href="manifest.json">
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+
+  <style>
+    body { font-family: Arial; margin: 10px; }
+    #map { height: 400px; margin-top: 10px; }
+    button { padding: 10px; margin: 5px 0; }
+  </style>
+</head>
+<body>
+
+<h2>Speed Tracker</h2>
+
+<button onclick="startTracking()">Start</button>
+<button onclick="stopTracking()">Stop</button>
+
+<p>Speed: <span id="speed">0</span> mph</p>
+<p>Timer: <span id="timer">0</span> sec</p>
+
+<div id="map"></div>
+
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+<script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('service-worker.js');
+}
+
+let map, marker, polyline;
+let path = [];
+let watchId;
+
+let timerInterval;
+let timerSeconds = 0;
+let timerRunning = false;
+let startTime;
+
+const speedThreshold = 15;
+
+function initMap(lat, lng) {
+  map = L.map('map').setView([lat, lng], 15);
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap contributors'
+  }).addTo(map);
+
+  marker = L.marker([lat, lng]).addTo(map);
+
+  polyline = L.polyline(path, { color: 'blue' }).addTo(map);
+}
+
+function startTracking() {
+  watchId = navigator.geolocation.watchPosition(updatePosition, errorHandler, {
+    enableHighAccuracy: true
+  });
+}
+
+function stopTracking() {
+  navigator.geolocation.clearWatch(watchId);
+  stopTimer();
+}
+
+function updatePosition(position) {
+  const lat = position.coords.latitude;
+  const lng = position.coords.longitude;
+
+  if (!map) initMap(lat, lng);
+
+  marker.setLatLng([lat, lng]);
+  map.setView([lat, lng]);
+
+  path.push([lat, lng]);
+  polyline.setLatLngs(path);
+
+  let speed = position.coords.speed;
+  let mph = speed ? speed * 2.237 : 0;
+
+  document.getElementById("speed").textContent = mph.toFixed(2);
+
+  if (mph < speedThreshold && !timerRunning) startTimer();
+  if (mph >= speedThreshold && timerRunning) stopTimer();
+}
+
+function startTimer() {
+  timerRunning = true;
+  timerSeconds = 0;
+  startTime = new Date();
+
+  timerInterval = setInterval(() => {
+    timerSeconds++;
+    document.getElementById("timer").textContent = timerSeconds;
+  }, 1000);
+}
+
+function stopTimer() {
+  if (!timerRunning) return;
+
+  clearInterval(timerInterval);
+  timerRunning = false;
+
+  let logs = JSON.parse(localStorage.getItem("logs")) || [];
+
+  logs.push({
+    date: startTime.toLocaleDateString(),
+    start: startTime.toLocaleTimeString(),
+    duration: timerSeconds
+  });
+
+  localStorage.setItem("logs", JSON.stringify(logs));
+}
+
+function errorHandler(error) {
+  alert("Location error: " + error.message);
+}
+</script>
+
+</body>
+</html>
